@@ -17,3 +17,6 @@ SkullKingPlugin 提供了两个主要的权限设置：
 1. `skullking.bypass`：拥有此权限的玩家可以无视地牢进入限制，即使在未击败骷髅王的情况下也能自由进入地牢。
 2. `Plant.bypass`：拥有此权限的玩家可以无视神庙进入限制，即使在未击败世纪之花的情况下也能自由进入神庙。
 
+## 支持与反馈
+- 如果您在使用过程中遇到问题或有任何建议，欢迎在官方论坛或社区中提出issues或pr。
+- github仓库：https://github.com/THEXN/Block-Dungeon-Temple-Access
