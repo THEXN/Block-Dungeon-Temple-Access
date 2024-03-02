@@ -15,7 +15,7 @@ namespace SkullKingPlugin
         public override string Author => "肝帝熙恩";
         public override string Name => "阻止进入地牢或神庙";
         public override string Description => "阻止玩家在击败骷髅王/世纪之花前进入地牢/神庙";
-        public override Version Version => new Version(1, 1, 2);
+        public override Version Version => new Version(1, 1, 3);
         public static Configuration Config;
         Color orangeColor = new Color(255, 165, 0);
 
@@ -37,142 +37,80 @@ namespace SkullKingPlugin
         public override void Initialize()
         {
             GeneralHooks.ReloadEvent += ReloadConfig;
-            ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
+            GetDataHandlers.PlayerUpdate.Register(OnPlayerUpdatePhysics);
         }
 
         protected override void Dispose(bool disposing)
         {
-            GeneralHooks.ReloadEvent += ReloadConfig;
             if (disposing)
             {
-                ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
+                GetDataHandlers.PlayerUpdate.UnRegister(OnPlayerUpdatePhysics);
             }
-
             base.Dispose(disposing);
         }
-
-        private bool IsDungeonGuardianAlive()
+        private void OnPlayerUpdatePhysics(object? sender, GetDataHandlers.PlayerUpdateEventArgs e)
         {
-            foreach (NPC npc in Main.npc)
-            {
-                if (npc.active && npc.type == NPCID.DungeonGuardian)
-                {
-                    return true;
-                }
-            }
-            return false;
+            CheckPlayerLocation(e.Player);
         }
 
-        private void OnUpdate(EventArgs args)
+        private void CheckPlayerLocation(TSPlayer player)
         {
-            foreach (TSPlayer player in TShock.Players)
+            if (player == null || !player.Active || player.Dead)
+                return;
+
+            // 检查是否在地牢环境
+            if (IsPlayerInDungeon(player) && !player.HasPermission("skullking.bypass") && Config.PreventPlayersEnterDungeon)
             {
-                if (player == null || !player.Active)
-                    continue;
-
-                // 如果玩家已死亡，跳过该玩家
-                if (player.Dead)
-                    continue;
-                // 检查是否在地牢环境
-                if (IsPlayerInDungeon(player) && !player.HasPermission("skullking.bypass") && Config.PreventEnterDungeon)
+                // 检查骷髅王是否被击败
+                if (!NPC.downedBoss3)
                 {
-                    // 检查骷髅王是否被击败
-                    if (!NPC.downedBoss3 && IsDungeonGuardianAlive())
+                    player.SendMessage("因为在没击败骷髅王的时候探索地牢，你被传送到出生点.", orangeColor);
+                    if (Config.TeleportPlayersEnterDungeonForUnkilledSkullKing)
                     {
-                        // 在这里执行击杀玩家的逻辑
-                        if(Config.TeleportEnterDungeonBeforeSkullKingKilled)
-                        {
-                            player.SendMessage("因为在没击败骷髅王的时候探索地牢，你被传送到出生点.", orangeColor);
-                            player.Teleport(Main.spawnTileX * 16, Main.spawnTileY * 16);
-                        }
-
-                        if (Config.PreventEnterDungeonBeforeSkullKingKilled)
-                        {
-                            player.KillPlayer();
-                        }
+                        player.Teleport(Main.spawnTileX * 16, Main.spawnTileY * 16);
+                        player.TPlayer.ZoneDungeon = false;
+                    }
+                    if (Config.KillPlayersEnterDungeonForUnkilledSkullKing)
+                    {
+                        player.KillPlayer();
                         player.SendMessage("因为在没击败骷髅王的时候探索地牢，你被击杀了.", orangeColor);
+                        player.TPlayer.ZoneDungeon = false;
 
                     }
                 }
-                // 检查是否在神庙环境
-                if (IsPlayerInTemple(player) && !player.HasPermission("Plant.bypass") && Config.PreventEnterTemple)
+            }
+            // 检查是否在神庙环境
+            if (IsPlayerInTemple(player) && !player.HasPermission("Plant.bypass") && Config.PreventPlayersEnterTemple)
+            {
+                // 检查世纪之花是否被击败
+                if (!NPC.downedPlantBoss)
                 {
-                    // 检查世纪之花是否被击败
-                    if (!NPC.downedPlantBoss)
+                    player.SendMessage("禁止在没击败世纪之花的时候探索神庙，你被传送到出生点", orangeColor);
+                    if (Config.TeleportPlayersEnterTempleForUnkilledPlantBoss)
                     {
-                        if (Config.TeleportEnterTempleBeforePlantBossKilled)
-                        {
-                            player.SendMessage("禁止在没击败世纪之花的时候探索神庙，你被传送到出生点" , orangeColor);
-                            player.Teleport(Main.spawnTileX * 16, Main.spawnTileY * 16);
-                        }
-                        if (Config.PreventEnterTempleBeforePlantBossKilled)
-                        {
-                            player.SendMessage("禁止在没击败世纪之花的时候探索神庙，你被击杀", orangeColor);
-                            player.KillPlayer();
-                        }
+                        player.Teleport(Main.spawnTileX * 16, Main.spawnTileY * 16);
+                        player.TPlayer.ZoneLihzhardTemple = false;
+                    }
+                    if (Config.KillPlayersEnterTempleForUnkilledPlantBoss)
+                    {
+                        player.SendMessage("禁止在没击败世纪之花的时候探索神庙，你被击杀", orangeColor);
+                        player.KillPlayer();
+                        player.TPlayer.ZoneLihzhardTemple = false;
                     }
                 }
             }
         }
-
 
         private bool IsPlayerInDungeon(TSPlayer player)
         {
-            int tileX = (int)player.TileX;
-            int tileY = (int)player.TileY;
-
-            // 定义地牢墙壁的类型数组
-            int[] dungeonWallTypes = { 7, 8, 9, 94, 98, 96, 95, 99, 97 };
-
-            // 检查玩家是否在地牢墙壁内
-            for (int x = tileX - 2; x <= tileX + 2; x++)
-            {
-                for (int y = tileY - 2; y <= tileY + 2; y++)
-                {
-                    if (Array.Exists(dungeonWallTypes, wallType => Main.tile[x, y].wall == wallType))
-                    {
-                        // 检查玩家是否在地下
-                        if ((int)player.TileY > (int)(Main.worldSurface))
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
+            return player.TPlayer.ZoneDungeon;
         }
-
 
         private bool IsPlayerInTemple(TSPlayer player)
         {
-            int tileX = (int)player.TileX;
-            int tileY = (int)player.TileY;
-
-            // 定义神庙墙壁的类型数组
-            int[] templeWallTypes = { 87 };
-
-            // 记录符合条件的神庙墙壁数量
-            int templeWallCount = 0;
-
-            // 检查玩家2x2范围内的Tile
-            for (int x = tileX - 1; x <= tileX + 1; x++)
-            {
-                for (int y = tileY - 1; y <= tileY + 1; y++)
-                {
-                    // 检查当前Tile是否是指定的神庙墙壁类型
-                    if (Array.Exists(templeWallTypes, wallType => Main.tile[x, y].wall == wallType))
-                    {
-                        // 符合条件的神庙墙壁数量加一
-                        templeWallCount++;
-                    }
-                }
-            }
-
-            // 判断符合条件的神庙墙壁数量是否不超过4块
-            return templeWallCount >= 4;
+            // 假设您有与神庙相关的Zone属性，例如 ZoneLihzhardTemple，此处替换为实际属性名
+            return player.TPlayer.ZoneLihzhardTemple;
         }
-
     }
 }
 
